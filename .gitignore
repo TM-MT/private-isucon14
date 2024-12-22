@@ -1,2 +1,4 @@
 _tmp
 webapp/public
+
+*.sublime-workspace
