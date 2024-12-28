@@ -6,12 +6,18 @@ tasks:
       - go install github.com/sqldef/sqldef/cmd/mysqldef@latest
   up:
     cmds:
-      - docker compose -f compose-local.yml up -d
+      - docker compose -f compose-rust.yml up
     dir: ./development
+    desc: "Start the application"
   down:
     cmds:
-      - docker compose -f compose-local.yml down -v --remove-orphans
+      - docker compose -f compose-rust.yml down -v --remove-orphans
     dir: ./development
+  bench:
+    cmds:
+      - task run-local
+    dir: ./bench
+    desc: "Run benchmark"
   migrate:
     deps:
       - up
