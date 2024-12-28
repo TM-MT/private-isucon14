@@ -13,11 +13,22 @@ tasks:
     cmds:
       - docker compose -f compose-rust.yml down -v --remove-orphans
     dir: ./development
+  run:
+    cmds:
+      - task pre-bench
+      - task bench
+      - task post-bench
+  pre-bench:
+    cmds:
+      - :>./webapp/logs/mysql/mysql-slow.log
   bench:
     cmds:
       - task run-local
     dir: ./bench
     desc: "Run benchmark"
+  post-bench:
+    cmds:
+      - make post-bench-mysql
   migrate:
     deps:
       - up

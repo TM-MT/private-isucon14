@@ -1,4 +1,5 @@
 _tmp
 webapp/public
+webapp/logs/mysql/*
 
 *.sublime-workspace

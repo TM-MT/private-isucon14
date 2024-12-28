@@ -35,8 +35,10 @@ services:
     ports:
       - 3306:3306
     volumes:
+      - ./etc/my.cnf:/etc/my.cnf
       - mysql:/var/lib/mysql
       - ../webapp/sql:/docker-entrypoint-initdb.d
+      - ../webapp/logs/mysql:/var/log/mysql
     healthcheck:
       test: mysqladmin ping -h 127.0.0.1 -uisucon -pisucon
       start_period: 60s
