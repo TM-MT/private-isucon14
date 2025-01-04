@@ -4,6 +4,10 @@ tasks:
   init:
     cmds:
       - go install github.com/sqldef/sqldef/cmd/mysqldef@latest
+  build:
+    cmds:
+      - docker compose -f compose-rust.yml build
+    dir: ./development
   up:
     cmds:
       - docker compose -f compose-rust.yml up
