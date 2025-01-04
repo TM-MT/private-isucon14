@@ -3,11 +3,12 @@ FROM rust:1.83-bookworm
 WORKDIR /home/isucon/webapp/rust
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
-  default-mysql-client-core=1.1.0 \
- && apt-get clean \
- && rm -rf /var/lib/apt/lists/*
+  default-mysql-client-core=1.1.0 mold \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p .cargo
 
-COPY ./Cargo.toml ./Cargo.lock ./
+COPY ./Cargo.toml ./Cargo.lock ./.cargo/config.toml ./
 RUN mkdir src && echo 'fn main() {}' > ./src/main.rs && cargo build --release --locked && rm src/main.rs target/release/deps/isuride-*
 COPY ./src/ ./src/
 RUN cargo build --release --locked --frozen
