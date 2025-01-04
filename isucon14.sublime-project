@@ -4,6 +4,9 @@
 			"path": "./webapp/rust"
 		},
 		{
+			"path": "./webapp/sql"
+		},
+		{
 			"path": "./webapp/logs"
 		},
 		{
