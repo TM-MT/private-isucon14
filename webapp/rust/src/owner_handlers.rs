@@ -215,12 +215,15 @@ impl From<MysqlDecimal> for i64 {
 #[derive(Debug, sqlx::FromRow)]
 struct ChairWithDetail {
     id: String,
+    #[allow(dead_code)]
     owner_id: String,
     name: String,
+    #[allow(dead_code)]
     access_token: String,
     model: String,
     is_active: bool,
     created_at: DateTime<Utc>,
+    #[allow(dead_code)]
     updated_at: DateTime<Utc>,
     total_distance: MysqlDecimal,
     total_distance_updated_at: Option<DateTime<Utc>>,
