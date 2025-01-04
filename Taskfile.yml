@@ -21,6 +21,8 @@ tasks:
   pre-bench:
     cmds:
       - :>./webapp/logs/mysql/mysql-slow.log
+      - :>./webapp/logs/nginx/access.log
+      - :>./webapp/logs/nginx/error.log
   bench:
     cmds:
       - task run-local
@@ -51,3 +53,5 @@ tasks:
   perl:run:
     cmd: carton exec plackup -s Starlet -p 8080 -Ilib -r app.psgi
     dir: webapp/perl
+  build-image:
+    cmd: docker build -f ./development/Dockerfile .

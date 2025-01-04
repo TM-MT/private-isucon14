@@ -5,6 +5,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ../frontend/build/client:/home/isucon/webapp/public:ro
+      - ../webapp/logs/nginx:/var/log/nginx
     ports:
       - "8080:80"
     depends_on:
