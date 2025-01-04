@@ -58,6 +58,6 @@ tasks:
     cmd: carton exec plackup -s Starlet -p 8080 -Ilib -r app.psgi
     dir: webapp/perl
   mysql:
-    cmd: docker compose -f compose-rust.yml exec db mysql -u isucon --password=isucon
+    cmd: docker compose -f compose-rust.yml exec db mysql -u isucon --password=isucon isuride
     dir: ./development
     desc: "mysql"
