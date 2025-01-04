@@ -57,5 +57,7 @@ tasks:
   perl:run:
     cmd: carton exec plackup -s Starlet -p 8080 -Ilib -r app.psgi
     dir: webapp/perl
-  build-image:
-    cmd: docker build -f ./development/Dockerfile .
+  mysql:
+    cmd: docker compose -f compose-rust.yml exec db mysql -u isucon --password=isucon
+    dir: ./development
+    desc: "mysql"
