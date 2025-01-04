@@ -36,6 +36,7 @@ CREATE TABLE chairs
 )
   COMMENT = '椅子情報テーブル';
 CREATE INDEX chairs_access_token ON chairs(access_token);
+CREATE INDEX chairs_owner_id ON chairs(owner_id);
 
 
 DROP TABLE IF EXISTS chair_locations;
@@ -49,7 +50,39 @@ CREATE TABLE chair_locations
   PRIMARY KEY (id)
 )
   COMMENT = '椅子の現在位置情報テーブル';
-CREATE INDEX chair_locations_chair_id_created_at ON chair_locations(chair_id, created_at);
+CREATE INDEX chair_locations_chair_id_created_at ON chair_locations(chair_id,
+created_at);
+
+DROP TABLE IF EXISTS chair_total_distance;
+CREATE TABLE chair_total_distance
+(
+  chair_id        VARCHAR(26) NOT NULL COMMENT '椅子ID',
+  total_latitude  INTEGER     NOT NULL COMMENT '経度',
+  total_longitude INTEGER     NOT NULL COMMENT '緯度',
+  last_latitude   INTEGER     NOT NULL COMMENT '経度',
+  last_longitude  INTEGER     NOT NULL COMMENT '緯度',
+  updated_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新日時',
+  UNIQUE KEY (chair_id)
+);
+
+DELIMITER //
+DROP TRIGGER IF EXISTS update_total_distance //
+CREATE TRIGGER update_total_distance
+BEFORE INSERT ON chair_locations FOR EACH ROW
+BEGIN
+  INSERT INTO chair_total_distance 
+    (chair_id, total_latitude, total_longitude, last_latitude, last_longitude)
+  VALUES
+    (NEW.chair_id, 0, 0, NEW.latitude, NEW.longitude)
+  ON DUPLICATE KEY UPDATE
+    total_latitude = total_latitude + ABS(last_latitude - NEW.latitude),
+    total_longitude = total_longitude + ABS(last_longitude - NEW.longitude),
+    last_latitude = NEW.latitude,
+    last_longitude = NEW.longitude,
+    updated_at = NEW.created_at;
+END //
+DELIMITER ;
+
 
 DROP TABLE IF EXISTS users;
 CREATE TABLE users
