@@ -4,7 +4,7 @@ use axum_extra::extract::cookie::Cookie;
 use axum_extra::extract::CookieJar;
 use ulid::Ulid;
 
-use crate::models::{Chair, ChairLocation, Owner, Ride, RideStatus, User};
+use crate::models::{Chair, Owner, Ride, RideStatus, User};
 use crate::{AppState, Coordinate, Error};
 
 pub fn chair_routes(app_state: AppState) -> axum::Router<AppState> {
@@ -111,7 +111,7 @@ async fn chair_post_activity(
 
 #[derive(Debug, serde::Serialize)]
 struct ChairPostCoordinateResponse {
-    recorded_at: i64,
+    recorded_at: u64,
 }
 
 async fn chair_post_coordinate(
@@ -121,21 +121,25 @@ async fn chair_post_coordinate(
 ) -> Result<axum::Json<ChairPostCoordinateResponse>, Error> {
     let mut tx = pool.begin().await?;
 
-    let chair_location_id = Ulid::new().to_string();
     sqlx::query(
-        "INSERT INTO chair_locations (id, chair_id, latitude, longitude) VALUES (?, ?, ?, ?)",
+        r#"
+        INSERT INTO chair_total_distance 
+               (chair_id, total_latitude, total_longitude, last_latitude, last_longitude)
+        VALUES
+               (?, 0, 0, ?, ?)
+        ON DUPLICATE KEY UPDATE
+               total_latitude = total_latitude + ABS(last_latitude - VALUES(last_latitude)),
+               total_longitude = total_longitude + ABS(last_longitude - VALUES(last_longitude)),
+               last_latitude = VALUES(last_latitude),
+               last_longitude = VALUES(last_longitude),
+               updated_at = NOW(6)
+        "#,
     )
-    .bind(&chair_location_id)
     .bind(&chair.id)
     .bind(req.latitude)
     .bind(req.longitude)
     .execute(&mut *tx)
     .await?;
-
-    let location: ChairLocation = sqlx::query_as("SELECT * FROM chair_locations WHERE id = ?")
-        .bind(chair_location_id)
-        .fetch_one(&mut *tx)
-        .await?;
 
     let ride: Option<Ride> =
         sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1")
@@ -174,7 +178,7 @@ async fn chair_post_coordinate(
     tx.commit().await?;
 
     Ok(axum::Json(ChairPostCoordinateResponse {
-        recorded_at: location.created_at.timestamp_millis(),
+        recorded_at: crate::get_current_timestamp(),
     }))
 }
 

@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum_extra::extract::CookieJar;
 use ulid::Ulid;
 
-use crate::models::{Chair, ChairLocation, Coupon, Owner, PaymentToken, Ride, RideStatus, User};
+use crate::models::{Chair, Coupon, Owner, PaymentToken, Ride, RideStatus, User};
 use crate::{AppState, Coordinate, Error};
 
 pub fn app_routes(app_state: AppState) -> axum::Router<AppState> {
@@ -726,7 +726,7 @@ struct AppGetNearbyChairsQuery {
 #[derive(Debug, serde::Serialize)]
 struct AppGetNearbyChairsResponse {
     chairs: Vec<AppGetNearbyChairsResponseChair>,
-    retrieved_at: i64,
+    retrieved_at: u64,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -779,8 +779,17 @@ async fn app_get_nearby_chairs(
         }
 
         // 最新の位置情報を取得
-        let Some(chair_location): Option<ChairLocation> = sqlx::query_as(
-            "SELECT * FROM chair_locations WHERE chair_id = ? ORDER BY created_at DESC LIMIT 1",
+        let Some(current_coordinate): Option<Coordinate> = sqlx::query_as(
+            r#"
+            SELECT
+                chair_id,
+                last_latitude AS latitude,
+                last_longitude AS longitude
+            FROM
+                chair_total_distance
+            WHERE
+                chair_id = ?
+            "#,
         )
         .bind(&chair.id)
         .fetch_optional(&mut *tx)
@@ -791,30 +800,22 @@ async fn app_get_nearby_chairs(
         if crate::calculate_distance(
             coordinate.latitude,
             coordinate.longitude,
-            chair_location.latitude,
-            chair_location.longitude,
+            current_coordinate.latitude,
+            current_coordinate.longitude,
         ) <= distance
         {
             nearby_chairs.push(AppGetNearbyChairsResponseChair {
                 id: chair.id,
                 name: chair.name,
                 model: chair.model,
-                current_coordinate: Coordinate {
-                    latitude: chair_location.latitude,
-                    longitude: chair_location.longitude,
-                },
+                current_coordinate,
             });
         }
     }
 
-    let retrieved_at: chrono::DateTime<chrono::Utc> =
-        sqlx::query_scalar("SELECT CURRENT_TIMESTAMP(6)")
-            .fetch_one(&mut *tx)
-            .await?;
-
     Ok(axum::Json(AppGetNearbyChairsResponse {
         chairs: nearby_chairs,
-        retrieved_at: retrieved_at.timestamp(),
+        retrieved_at: crate::get_current_timestamp(),
     }))
 }
 

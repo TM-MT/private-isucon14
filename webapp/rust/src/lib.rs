@@ -1,6 +1,7 @@
 use crate::models::Chair;
 use axum::{http::StatusCode, response::Response};
 use moka::future::Cache;
+use std::time::SystemTime;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -50,7 +51,7 @@ impl axum::response::IntoResponse for Error {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct Coordinate {
     pub latitude: i32,
     pub longitude: i32,
@@ -103,6 +104,13 @@ pub fn calculate_fare(
             dest_longitude,
         );
     INITIAL_FARE + metered_fare
+}
+
+pub fn get_current_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
 }
 
 pub mod app_handlers;
