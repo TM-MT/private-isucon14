@@ -10,7 +10,7 @@ tasks:
     dir: ./development
   up:
     cmds:
-      - docker compose -f compose-rust.yml up
+      - docker compose -f compose-rust.yml up --build
     dir: ./development
     desc: "Start the application"
   down:
