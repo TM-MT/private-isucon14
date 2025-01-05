@@ -263,7 +263,7 @@ async fn chair_get_notification(
             },
             status,
         }),
-        retry_after_ms: Some(30),
+        retry_after_ms: Some(300),
     }))
 }
 
