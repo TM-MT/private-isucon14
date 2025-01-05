@@ -1,6 +1,8 @@
 use axum::extract::State;
 use isuride::{AppState, Error};
+use moka::future::Cache;
 use std::net::SocketAddr;
+use std::time::Duration;
 use tokio::net::TcpListener;
 
 #[tokio::main]
@@ -33,8 +35,12 @@ async fn main() -> anyhow::Result<()> {
                 .database(&dbname),
         )
         .await?;
+    let chair_cache = Cache::builder()
+        // Time to live (TTL): 1 minutes
+        .time_to_live(Duration::from_secs(60))
+        .build();
 
-    let app_state = AppState { pool };
+    let app_state = AppState { pool, chair_cache };
 
     let app = axum::Router::new()
         .route("/api/initialize", axum::routing::post(post_initialize))

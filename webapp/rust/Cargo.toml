@@ -11,6 +11,7 @@ axum-extra = { version = "0.9", features = ["cookie"] }
 chrono = "0.4"
 hex = "0.4"
 listenfd = "1"
+moka = { version = "0.12.9", features = ["future"] }
 num-traits = "0.2"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "json"] }

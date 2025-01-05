@@ -1,8 +1,11 @@
+use crate::models::Chair;
 use axum::{http::StatusCode, response::Response};
+use moka::future::Cache;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
+    pub chair_cache: Cache<String, Chair>,
 }
 
 #[derive(Debug, thiserror::Error)]
