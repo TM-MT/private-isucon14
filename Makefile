@@ -41,7 +41,7 @@ post-bench-mysql:
 analyze-nginx-log:
 	cat $(LOG_FILE_NGINX) | \
 		alp json \
-			-o count,method,uri,min,avg,max,sum \
+			-o count,method,uri,min,avg,max,sum,1xx,2xx,3xx,4xx,5xx \
 			--limit 100000 \
 			--matching-groups=/api/app/rides/[^/]*/evaluation$$,/api/chair/rides/[^/]*/status$$,/api/owner/sales.*,/images/.*,/assets/.* \
 			--sort=sum -r \
