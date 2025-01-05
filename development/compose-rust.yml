@@ -25,6 +25,7 @@ services:
         condition: service_healthy
     environment:
       ISUCON_DB_HOST: db
+      ISUCON_PAYMENT_GATEWAY_URL: http://bench:12345
     extra_hosts:
       - "host.docker.internal:host-gateway"
   db:
@@ -46,6 +47,13 @@ services:
   matcher:
     image: mirror.gcr.io/curlimages/curl:latest
     command: /bin/sh -c "while true; do curl -s http://nginx/api/internal/matching; sleep 0.5; done"
+  bench:
+    build:
+      context: ../bench
+      dockerfile: ../bench/Dockerfile-local
+    command: go run . run --target http://nginx --payment-url=http://localhost:12345 -t 60
+    ports:
+      - 12345:12345
 
 volumes:
   mysql: {}

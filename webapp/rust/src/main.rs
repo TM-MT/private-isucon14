@@ -23,6 +23,8 @@ async fn main() -> anyhow::Result<()> {
     let user = std::env::var("ISUCON_DB_USER").unwrap_or_else(|_| "isucon".to_owned());
     let password = std::env::var("ISUCON_DB_PASSWORD").unwrap_or_else(|_| "isucon".to_owned());
     let dbname = std::env::var("ISUCON_DB_NAME").unwrap_or_else(|_| "isuride".to_owned());
+    let payment_gateway_url =
+        std::env::var("ISUCON_PAYMENT_GATEWAY_URL").unwrap_or("http://localhost:12345".to_string());
 
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(50)
@@ -40,7 +42,11 @@ async fn main() -> anyhow::Result<()> {
         .time_to_live(Duration::from_secs(60))
         .build();
 
-    let app_state = AppState { pool, chair_cache };
+    let app_state = AppState {
+        pool,
+        chair_cache,
+        payment_gateway_url,
+    };
 
     let app = axum::Router::new()
         .route("/api/initialize", axum::routing::post(post_initialize))

@@ -4,13 +4,9 @@ tasks:
   init:
     cmds:
       - go install github.com/sqldef/sqldef/cmd/mysqldef@latest
-  build:
-    cmds:
-      - docker compose -f compose-rust.yml build
-    dir: ./development
   up:
     cmds:
-      - docker compose -f compose-rust.yml up --build
+      - docker compose -f compose-rust.yml up --build nginx webapp db matcher
     dir: ./development
     desc: "Start the application"
   down:
@@ -29,8 +25,8 @@ tasks:
       - :>./webapp/logs/nginx/error.log
   bench:
     cmds:
-      - task run-local
-    dir: ./bench
+      - docker compose -f compose-rust.yml up --build bench
+    dir: ./development
     desc: "Run benchmark"
   post-bench:
     cmds:
@@ -61,3 +57,6 @@ tasks:
     cmd: docker compose -f compose-rust.yml exec db mysql -u isucon --password=isucon isuride
     dir: ./development
     desc: "mysql"
+  check-payment:
+    cmd: curl http://localhost:12345/payments --oauth2-bearer {{.CLI_ARGS}}
+    desc: "Tokenに紐づく決済情報を確認 - task check-payment -- <token>"

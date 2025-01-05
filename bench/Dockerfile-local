@@ -1,0 +1,10 @@
+FROM golang:1.23
+
+WORKDIR /app
+
+COPY . .
+
+RUN go build -ldflags "-s -w"
+
+EXPOSE 12345
+CMD go run . run --target http://nginx:8080 -t 60

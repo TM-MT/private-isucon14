@@ -1,19 +1,26 @@
 {
 	"folders": [
 		{
-			"path": "./webapp/rust"
+			"path": "./webapp/rust",
 		},
 		{
-			"path": "./webapp/sql"
+			"path": "./webapp/sql",
 		},
 		{
-			"path": "./webapp/logs"
+			"path": "./webapp/logs",
 		},
 		{
-			"path": "./development"
+			"path": "./development",
 		},
 		{
-			"path": "."
+			"path": ".",
 		}
-	]
+	],
+	"settings": {
+		"LSP": {
+			"sqruff": {
+				"enabled": true
+			}
+		}
+	},
 }

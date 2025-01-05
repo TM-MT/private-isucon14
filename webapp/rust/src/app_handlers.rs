@@ -438,7 +438,11 @@ struct AppPostRideEvaluationResponse {
 }
 
 async fn app_post_ride_evaluation(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        payment_gateway_url,
+        ..
+    }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
     axum::Json(req): axum::Json<AppPostRideEvaluationRequest>,
 ) -> Result<axum::Json<AppPostRideEvaluationResponse>, Error> {
@@ -505,11 +509,6 @@ async fn app_post_ride_evaluation(
         ride.destination_longitude,
     )
     .await?;
-
-    let payment_gateway_url: String =
-        sqlx::query_scalar("SELECT value FROM settings WHERE name = 'payment_gateway_url'")
-            .fetch_one(&mut *tx)
-            .await?;
 
     async fn retrieve_rides_order_by_created_at_asc(
         tx: &mut sqlx::MySqlConnection,

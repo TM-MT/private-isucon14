@@ -6,6 +6,7 @@ use moka::future::Cache;
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
     pub chair_cache: Cache<String, Chair>,
+    pub payment_gateway_url: String,
 }
 
 #[derive(Debug, thiserror::Error)]
