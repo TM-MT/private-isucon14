@@ -7,6 +7,8 @@ use std::time::SystemTime;
 pub struct AppState {
     pub pool: sqlx::MySqlPool,
     pub chair_cache: Cache<String, Chair>,
+    // ride_id to status
+    pub ride_status_cache: Cache<String, String>,
     pub payment_gateway_url: String,
 }
 
@@ -65,16 +67,25 @@ pub fn secure_random_str(b: usize) -> String {
     hex::encode(&buf)
 }
 
-pub async fn get_latest_ride_status<'e, E>(executor: E, ride_id: &str) -> sqlx::Result<String>
+pub async fn get_latest_ride_status<'e, E>(
+    executor: E,
+    ride_status_cache: &Cache<String, String>,
+    ride_id: &str,
+) -> sqlx::Result<String>
 where
     E: 'e + sqlx::Executor<'e, Database = sqlx::MySql>,
 {
-    sqlx::query_scalar(
-        "SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1",
-    )
-    .bind(ride_id)
-    .fetch_one(executor)
-    .await
+    Ok(ride_status_cache
+        .try_get_with(ride_id.to_string(), async {
+            sqlx::query_scalar(
+            "SELECT status FROM ride_statuses WHERE ride_id = ? ORDER BY created_at DESC LIMIT 1",
+        )
+        .bind(ride_id)
+        .fetch_one(executor)
+        .await
+        })
+        .await
+        .unwrap())
 }
 
 // マンハッタン距離を求める

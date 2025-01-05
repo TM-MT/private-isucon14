@@ -189,7 +189,11 @@ struct GetAppRidesResponseItemChair {
 }
 
 async fn app_get_rides(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
 ) -> Result<axum::Json<GetAppRidesResponse>, Error> {
     let mut tx = pool.begin().await?;
@@ -202,7 +206,7 @@ async fn app_get_rides(
 
     let mut items = Vec::with_capacity(rides.len());
     for ride in rides {
-        let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+        let status = crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
         if status != "COMPLETED" {
             continue;
         }
@@ -269,7 +273,11 @@ struct AppPostRidesResponse {
 }
 
 async fn app_post_rides(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
     axum::Json(req): axum::Json<AppPostRidesRequest>,
 ) -> Result<(StatusCode, axum::Json<AppPostRidesResponse>), Error> {
@@ -284,7 +292,7 @@ async fn app_post_rides(
 
     let mut continuing_ride_count = 0;
     for ride in rides {
-        let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+        let status = crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
         if status != "COMPLETED" {
             continuing_ride_count += 1;
         }
@@ -310,6 +318,9 @@ async fn app_post_rides(
         .bind("MATCHING")
         .execute(&mut *tx)
         .await?;
+    ride_status_cache
+        .insert(ride_id.clone(), "MATCHING".to_string())
+        .await;
 
     let ride_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM rides WHERE user_id = ?")
         .bind(&user.id)
@@ -441,6 +452,7 @@ async fn app_post_ride_evaluation(
     State(AppState {
         pool,
         payment_gateway_url,
+        ride_status_cache,
         ..
     }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
@@ -459,7 +471,7 @@ async fn app_post_ride_evaluation(
     else {
         return Err(Error::NotFound("ride not found"));
     };
-    let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+    let status = crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
 
     if status != "ARRIVED" {
         return Err(Error::BadRequest("not arrived yet"));
@@ -481,6 +493,9 @@ async fn app_post_ride_evaluation(
         .bind("COMPLETED")
         .execute(&mut *tx)
         .await?;
+    ride_status_cache
+        .insert(ride_id.clone(), "COMPLETED".to_string())
+        .await;
 
     let Some(ride): Option<Ride> = sqlx::query_as("SELECT * FROM rides WHERE id = ?")
         .bind(&ride_id)
@@ -573,7 +588,11 @@ struct AppGetNotificationResponseChairStats {
 }
 
 async fn app_get_notification(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(user): axum::Extension<User>,
 ) -> Result<axum::Json<AppGetNotificationResponse>, Error> {
     let mut tx = pool.begin().await?;
@@ -599,7 +618,7 @@ async fn app_get_notification(
     } else {
         (
             None,
-            crate::get_latest_ride_status(&mut *tx, &ride.id).await?,
+            crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?,
         )
     };
 
@@ -738,7 +757,11 @@ struct AppGetNearbyChairsResponseChair {
 }
 
 async fn app_get_nearby_chairs(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     Query(query): Query<AppGetNearbyChairsQuery>,
 ) -> Result<axum::Json<AppGetNearbyChairsResponse>, Error> {
     let distance = query.distance.unwrap_or(50);
@@ -768,7 +791,8 @@ async fn app_get_nearby_chairs(
         let mut skip = false;
         for ride in rides {
             // 過去にライドが存在し、かつ、それが完了していない場合はスキップ
-            let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+            let status =
+                crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
             if status != "COMPLETED" {
                 skip = true;
                 break;

@@ -41,10 +41,15 @@ async fn main() -> anyhow::Result<()> {
         // Time to live (TTL): 1 minutes
         .time_to_live(Duration::from_secs(60))
         .build();
+    let ride_status_cache = Cache::builder()
+        // Time to live (TTL): 1 minutes
+        .time_to_live(Duration::from_secs(60))
+        .build();
 
     let app_state = AppState {
         pool,
         chair_cache,
+        ride_status_cache,
         payment_gateway_url,
     };
 

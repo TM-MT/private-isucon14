@@ -115,7 +115,11 @@ struct ChairPostCoordinateResponse {
 }
 
 async fn chair_post_coordinate(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(chair): axum::Extension<Chair>,
     axum::Json(req): axum::Json<Coordinate>,
 ) -> Result<axum::Json<ChairPostCoordinateResponse>, Error> {
@@ -147,7 +151,7 @@ async fn chair_post_coordinate(
             .fetch_optional(&mut *tx)
             .await?;
     if let Some(ride) = ride {
-        let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+        let status = crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
         if status != "COMPLETED" && status != "CANCELED" {
             if req.latitude == ride.pickup_latitude
                 && req.longitude == ride.pickup_longitude
@@ -159,6 +163,9 @@ async fn chair_post_coordinate(
                     .bind("PICKUP")
                     .execute(&mut *tx)
                     .await?;
+                ride_status_cache
+                    .insert(ride.id.clone(), "PICKUP".to_string())
+                    .await;
             }
 
             if req.latitude == ride.destination_latitude
@@ -171,6 +178,9 @@ async fn chair_post_coordinate(
                     .bind("ARRIVED")
                     .execute(&mut *tx)
                     .await?;
+                ride_status_cache
+                    .insert(ride.id.clone(), "ARRIVED".to_string())
+                    .await;
             }
         }
     }
@@ -204,7 +214,11 @@ struct ChairGetNotificationResponseData {
 }
 
 async fn chair_get_notification(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(chair): axum::Extension<Chair>,
 ) -> Result<axum::Json<ChairGetNotificationResponse>, Error> {
     let mut tx = pool.begin().await?;
@@ -232,7 +246,7 @@ async fn chair_get_notification(
     } else {
         (
             None,
-            crate::get_latest_ride_status(&mut *tx, &ride.id).await?,
+            crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?,
         )
     };
 
@@ -277,7 +291,11 @@ struct PostChairRidesRideIDStatusRequest {
 }
 
 async fn chair_post_ride_status(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Extension(chair): axum::Extension<Chair>,
     Path((ride_id,)): Path<(String,)>,
     axum::Json(req): axum::Json<PostChairRidesRideIDStatusRequest>,
@@ -301,23 +319,30 @@ async fn chair_post_ride_status(
         "ENROUTE" => {
             sqlx::query("INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)")
                 .bind(Ulid::new().to_string())
-                .bind(ride.id)
+                .bind(&ride.id)
                 .bind("ENROUTE")
                 .execute(&mut *tx)
                 .await?;
+            ride_status_cache
+                .insert(ride.id, "ENROUTE".to_string())
+                .await;
         }
         // After Picking up user
         "CARRYING" => {
-            let status = crate::get_latest_ride_status(&mut *tx, &ride.id).await?;
+            let status =
+                crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
             if status != "PICKUP" {
                 return Err(Error::BadRequest("chair has not arrived yet"));
             }
             sqlx::query("INSERT INTO ride_statuses (id, ride_id, status) VALUES (?, ?, ?)")
                 .bind(Ulid::new().to_string())
-                .bind(ride.id)
+                .bind(&ride.id)
                 .bind("CARRYING")
                 .execute(&mut *tx)
                 .await?;
+            ride_status_cache
+                .insert(ride.id, "CARRYING".to_string())
+                .await;
         }
         _ => {
             return Err(Error::BadRequest("invalid status"));
