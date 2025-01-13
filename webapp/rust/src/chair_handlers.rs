@@ -5,7 +5,7 @@ use axum_extra::extract::CookieJar;
 use ulid::Ulid;
 
 use crate::models::{Chair, Owner, Ride, RideStatus, User};
-use crate::{AppState, Coordinate, Error};
+use crate::{knn, AppState, Coordinate, Error};
 
 pub fn chair_routes(app_state: AppState) -> axum::Router<AppState> {
     let routes =
@@ -128,20 +128,23 @@ async fn chair_post_coordinate(
     sqlx::query(
         r#"
         INSERT INTO chair_total_distance 
-               (chair_id, total_latitude, total_longitude, last_latitude, last_longitude)
+               (chair_id, total_latitude, total_longitude, last_latitude, last_longitude, hash, zone)
         VALUES
-               (?, 0, 0, ?, ?)
+               (?, 0, 0, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
                total_latitude = total_latitude + ABS(last_latitude - VALUES(last_latitude)),
                total_longitude = total_longitude + ABS(last_longitude - VALUES(last_longitude)),
                last_latitude = VALUES(last_latitude),
                last_longitude = VALUES(last_longitude),
+               hash = VALUES(hash),
                updated_at = NOW(6)
         "#,
     )
     .bind(&chair.id)
     .bind(req.latitude)
     .bind(req.longitude)
+    .bind(knn::coord_to_hash(req.latitude, req.longitude))
+    .bind(knn::coord_to_zone(req.latitude, req.longitude))
     .execute(&mut *tx)
     .await?;
 

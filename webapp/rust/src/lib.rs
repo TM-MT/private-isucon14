@@ -127,6 +127,7 @@ pub fn get_current_timestamp() -> u64 {
 pub mod app_handlers;
 pub mod chair_handlers;
 pub mod internal_handlers;
+pub mod knn;
 pub mod middlewares;
 pub mod models;
 pub mod owner_handlers;

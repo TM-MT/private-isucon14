@@ -61,9 +61,12 @@ CREATE TABLE chair_total_distance
   total_longitude INTEGER     NOT NULL COMMENT '緯度',
   last_latitude   INTEGER     NOT NULL COMMENT '経度',
   last_longitude  INTEGER     NOT NULL COMMENT '緯度',
+  hash            INTEGER     NOT NULL COMMENT 'ハッシュ',
+  zone            TINYINT(1)  NOT NULL COMMENT 'ZONE',
   updated_at      DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) COMMENT '更新日時',
   UNIQUE KEY (chair_id)
 );
+CREATE INDEX chair_total_distance_hash ON chair_total_distance(hash);
 
 DELIMITER //
 DROP TRIGGER IF EXISTS update_total_distance //
@@ -71,14 +74,18 @@ CREATE TRIGGER update_total_distance
 BEFORE INSERT ON chair_locations FOR EACH ROW
 BEGIN
   INSERT INTO chair_total_distance 
-    (chair_id, total_latitude, total_longitude, last_latitude, last_longitude)
+    (chair_id, total_latitude, total_longitude, last_latitude, last_longitude, hash, zone)
   VALUES
-    (NEW.chair_id, 0, 0, NEW.latitude, NEW.longitude)
+    (NEW.chair_id, 0, 0, NEW.latitude, NEW.longitude, 
+      ((NEW.latitude + 100) / 5) * 1000 + (NEW.longitude + 100) / 5,
+      IF(NEW.latitude < 180, 0, 1))
   ON DUPLICATE KEY UPDATE
     total_latitude = total_latitude + ABS(last_latitude - NEW.latitude),
     total_longitude = total_longitude + ABS(last_longitude - NEW.longitude),
     last_latitude = NEW.latitude,
     last_longitude = NEW.longitude,
+    hash = FLOOR(((NEW.latitude + 100) / 50)) * 1000 + FLOOR((NEW.longitude + 100) / 50),
+    zone = IF(NEW.latitude < 180, 0, 1),
     updated_at = NEW.created_at;
 END //
 DELIMITER ;

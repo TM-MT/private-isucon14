@@ -2,7 +2,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 
 use crate::models::{Chair, Ride};
-use crate::{AppState, Error};
+use crate::{knn, AppState, Error};
 
 pub fn internal_routes() -> axum::Router<AppState> {
     axum::Router::new().route(
@@ -25,11 +25,57 @@ async fn internal_get_matching(
     };
 
     for _ in 0..10 {
-        let Some(matched): Option<Chair> =
-            sqlx::query_as("SELECT * FROM chairs INNER JOIN (SELECT id FROM chairs WHERE is_active = TRUE ORDER BY RAND() LIMIT 1) AS tmp ON chairs.id = tmp.id LIMIT 1")
-                .fetch_optional(&pool)
-                .await?
-        else {
+        // おおよそ近いものを持ってくる
+        let Some(matched): Option<Chair> = ({
+            let m: Option<Chair> = sqlx::query_as(
+                r#"
+                SELECT
+                    c.*
+                FROM chairs c
+                INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
+                WHERE
+                    ctd.hash = ?
+                    AND c.is_active = TRUE
+                ORDER BY RAND()
+                LIMIT 1"#,
+            )
+            .bind(knn::coord_to_hash(
+                ride.pickup_latitude,
+                ride.pickup_longitude,
+            ))
+            .fetch_optional(&pool)
+            .await?;
+
+            match m {
+                Some(_) => m,
+                None => {
+                    tracing::info!(
+                        "No suitable chair Found for ride ({:#?}, {:#?}). Using random instead.",
+                        ride.pickup_latitude,
+                        ride.pickup_longitude
+                    );
+                    sqlx::query_as(
+                        r#"
+                        SELECT
+                            c.*
+                        FROM chairs c
+                        INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
+                        WHERE
+                            ctd.zone = ?
+                            AND c.is_active = TRUE
+                        ORDER BY RAND()
+                        LIMIT 1;
+                        "#,
+                    )
+                    .bind(knn::coord_to_zone(
+                        ride.pickup_latitude,
+                        ride.pickup_longitude,
+                    ))
+                    .fetch_optional(&pool)
+                    .await?
+                }
+            }
+        }) else {
             return Ok(StatusCode::NO_CONTENT);
         };
 
