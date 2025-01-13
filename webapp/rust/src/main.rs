@@ -2,13 +2,15 @@ use axum::extract::State;
 use isuride::{AppState, Error};
 use moka::future::Cache;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::sync::Semaphore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "info,tower_http=debug,axum::rejection=trace");
+        std::env::set_var("RUST_LOG", "info,tower_http=info,axum::rejection=trace");
     }
     tracing_subscriber::fmt::init();
 
@@ -51,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         chair_cache,
         ride_status_cache,
         payment_gateway_url,
+        internal_matching_lock: Arc::new(Semaphore::new(1)),
     };
 
     let app = axum::Router::new()

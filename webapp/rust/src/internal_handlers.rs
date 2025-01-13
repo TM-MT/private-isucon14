@@ -15,8 +15,18 @@ pub fn internal_routes() -> axum::Router<AppState> {
 
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
 async fn internal_get_matching(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        internal_matching_lock,
+        ..
+    }): State<AppState>,
 ) -> Result<StatusCode, Error> {
+    let semaphore = internal_matching_lock.clone();
+
+    if semaphore.try_acquire().is_err() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
     let rides: Vec<Ride> =
         sqlx::query_as("SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 10")
             .fetch_all(&pool)

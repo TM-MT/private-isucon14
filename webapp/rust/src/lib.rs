@@ -1,7 +1,9 @@
 use crate::models::Chair;
 use axum::{http::StatusCode, response::Response};
 use moka::future::Cache;
+use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::sync::Semaphore;
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -10,6 +12,7 @@ pub struct AppState {
     // ride_id to status
     pub ride_status_cache: Cache<String, String>,
     pub payment_gateway_url: String,
+    pub internal_matching_lock: Arc<Semaphore>,
 }
 
 #[derive(Debug, thiserror::Error)]
