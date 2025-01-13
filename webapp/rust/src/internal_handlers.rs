@@ -1,5 +1,7 @@
 use axum::extract::State;
 use axum::http::StatusCode;
+use sqlx::MySql;
+use sqlx::Pool;
 
 use crate::models::Ride;
 use crate::{knn, AppState, Error};
@@ -21,46 +23,69 @@ async fn internal_get_matching(
             .await?;
 
     for ride in rides {
-        let mut match_candidates: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT
-                c.id
-            FROM chairs c
-            INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
-            WHERE
-                ctd.hash = ?
-                AND c.is_active = TRUE
-                AND (SELECT 
-                        COUNT(*) = 0 
-                    FROM (
-                        SELECT 
-                            COUNT(chair_sent_at) = 6 AS completed 
-                        FROM ride_statuses 
-                        WHERE ride_id IN (
-                            SELECT id FROM rides WHERE chair_id = c.id
-                        )
-                        GROUP BY ride_id
-                    ) is_completed 
-                    WHERE completed = FALSE)
-            ORDER BY (ABS(ctd.last_latitude - ?) + ABS(ctd.last_longitude - ?)) ASC
-            LIMIT 1"#,
-        )
-        .bind(knn::coord_to_hash(
-            ride.pickup_latitude,
-            ride.pickup_longitude,
-        ))
-        .bind(ride.pickup_latitude)
-        .bind(ride.pickup_longitude)
-        .fetch_all(&pool)
-        .await?;
+        let candidate = get_candidate(&pool, &ride).await?;
 
-        if match_candidates.is_empty() {
+        if let Some((matched,)) = candidate {
+            sqlx::query("UPDATE rides SET chair_id = ? WHERE id = ?")
+                .bind(matched)
+                .bind(ride.id)
+                .execute(&pool)
+                .await?;
+        } else {
+            tracing::info!(
+                "No match found for ride ({:?}, {:?})",
+                ride.pickup_latitude,
+                ride.pickup_longitude
+            );
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn get_candidate(pool: &Pool<MySql>, ride: &Ride) -> Result<Option<(String,)>, Error> {
+    let match_candidate: Option<(String,)> = sqlx::query_as(
+        r#"
+        SELECT
+            c.id
+        FROM chairs c
+        INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
+        WHERE
+            ctd.hash = ?
+            AND c.is_active = TRUE
+            AND (SELECT 
+                    COUNT(*) = 0 
+                FROM (
+                    SELECT 
+                        COUNT(chair_sent_at) = 6 AS completed 
+                    FROM ride_statuses 
+                    WHERE ride_id IN (
+                        SELECT id FROM rides WHERE chair_id = c.id
+                    )
+                    GROUP BY ride_id
+                ) is_completed 
+                WHERE completed = FALSE)
+        ORDER BY (ABS(ctd.last_latitude - ?) + ABS(ctd.last_longitude - ?)) ASC
+        LIMIT 1"#,
+    )
+    .bind(knn::coord_to_hash(
+        ride.pickup_latitude,
+        ride.pickup_longitude,
+    ))
+    .bind(ride.pickup_latitude)
+    .bind(ride.pickup_longitude)
+    .fetch_optional(pool)
+    .await?;
+
+    match match_candidate {
+        Some(_) => Ok(match_candidate),
+        None => {
             tracing::info!(
                 "No suitable chair Found for ride ({:#?}, {:#?}). Using random instead.",
                 ride.pickup_latitude,
                 ride.pickup_longitude
             );
-            match_candidates = sqlx::query_as(
+            let m: Option<(String,)> = sqlx::query_as(
                 r#"
                 SELECT
                     c.*
@@ -89,24 +114,9 @@ async fn internal_get_matching(
                 ride.pickup_latitude,
                 ride.pickup_longitude,
             ))
-            .fetch_all(&pool)
+            .fetch_optional(pool)
             .await?;
-        }
-
-        if let Some((matched,)) = match_candidates.into_iter().next() {
-            sqlx::query("UPDATE rides SET chair_id = ? WHERE id = ?")
-                .bind(matched)
-                .bind(ride.id)
-                .execute(&pool)
-                .await?;
-        } else {
-            tracing::info!(
-                "No match found for ride ({:?}, {:?})",
-                ride.pickup_latitude,
-                ride.pickup_longitude
-            );
+            Ok(m)
         }
     }
-
-    Ok(StatusCode::NO_CONTENT)
 }
