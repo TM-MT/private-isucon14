@@ -748,20 +748,17 @@ struct AppGetNearbyChairsResponse {
     retrieved_at: u64,
 }
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
 struct AppGetNearbyChairsResponseChair {
     id: String,
     name: String,
     model: String,
+    #[sqlx(flatten)]
     current_coordinate: Coordinate,
 }
 
 async fn app_get_nearby_chairs(
-    State(AppState {
-        pool,
-        ride_status_cache,
-        ..
-    }): State<AppState>,
+    State(AppState { pool, .. }): State<AppState>,
     Query(query): Query<AppGetNearbyChairsQuery>,
 ) -> Result<axum::Json<AppGetNearbyChairsResponse>, Error> {
     let distance = query.distance.unwrap_or(50);
@@ -769,73 +766,38 @@ async fn app_get_nearby_chairs(
         latitude: query.latitude,
         longitude: query.longitude,
     };
-
-    let mut tx = pool.begin().await?;
-
-    let chairs: Vec<Chair> = sqlx::query_as("SELECT * FROM chairs")
-        .fetch_all(&mut *tx)
-        .await?;
-
-    let mut nearby_chairs = Vec::new();
-    for chair in chairs {
-        if !chair.is_active {
-            continue;
-        }
-
-        let rides: Vec<Ride> =
-            sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY created_at DESC")
-                .bind(&chair.id)
-                .fetch_all(&mut *tx)
-                .await?;
-
-        let mut skip = false;
-        for ride in rides {
-            // 過去にライドが存在し、かつ、それが完了していない場合はスキップ
-            let status =
-                crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
-            if status != "COMPLETED" {
-                skip = true;
-                break;
-            }
-        }
-        if skip {
-            continue;
-        }
-
-        // 最新の位置情報を取得
-        let Some(current_coordinate): Option<Coordinate> = sqlx::query_as(
-            r#"
-            SELECT
-                chair_id,
-                last_latitude AS latitude,
-                last_longitude AS longitude
-            FROM
-                chair_total_distance
-            WHERE
-                chair_id = ?
-            "#,
-        )
-        .bind(&chair.id)
-        .fetch_optional(&mut *tx)
-        .await?
-        else {
-            continue;
-        };
-        if crate::calculate_distance(
-            coordinate.latitude,
-            coordinate.longitude,
-            current_coordinate.latitude,
-            current_coordinate.longitude,
-        ) <= distance
-        {
-            nearby_chairs.push(AppGetNearbyChairsResponseChair {
-                id: chair.id,
-                name: chair.name,
-                model: chair.model,
-                current_coordinate,
-            });
-        }
-    }
+    let nearby_chairs: Vec<AppGetNearbyChairsResponseChair> = sqlx::query_as(
+        r#"
+        SELECT
+            c.id,
+            c.name,
+            c.model,
+            last_latitude AS latitude,
+            last_longitude AS longitude
+        FROM
+            chair_total_distance ctd
+        LEFT JOIN chairs c ON ctd.chair_id = c.id
+        WHERE
+            ABS(last_latitude - ?) + ABS(last_longitude - ?) <= ?
+            AND c.is_active
+            AND (SELECT 
+                    COUNT(*) = 0 
+                FROM (
+                    SELECT 
+                        COUNT(chair_sent_at) = 6 AS completed 
+                    FROM ride_statuses 
+                    WHERE ride_id IN (
+                        SELECT id FROM rides WHERE chair_id = c.id
+                    )
+                    GROUP BY ride_id
+                ) is_completed 
+                WHERE completed = FALSE)"#,
+    )
+    .bind(coordinate.latitude)
+    .bind(coordinate.longitude)
+    .bind(distance)
+    .fetch_all(&pool)
+    .await?;
 
     Ok(axum::Json(AppGetNearbyChairsResponse {
         chairs: nearby_chairs,
