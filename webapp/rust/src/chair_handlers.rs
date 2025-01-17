@@ -234,7 +234,7 @@ async fn chair_get_notification(
     else {
         return Ok(axum::Json(ChairGetNotificationResponse {
             data: None,
-            retry_after_ms: Some(30),
+            retry_after_ms: Some(300),
         }));
     };
 
