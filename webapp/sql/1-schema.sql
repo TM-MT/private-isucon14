@@ -137,6 +137,7 @@ CREATE TABLE rides
 )
   COMMENT = 'ライド情報テーブル';
 CREATE INDEX rides_user_id ON rides(user_id);
+CREATE INDEX rides_chair_id_created_at ON rides(chair_id, created_at DESC);
 CREATE INDEX rides_chair_id_updated_at ON rides(chair_id, updated_at);
 
 
