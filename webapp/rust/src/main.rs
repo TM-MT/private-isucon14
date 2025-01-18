@@ -87,7 +87,12 @@ struct PostInitializeResponse {
 }
 
 async fn post_initialize(
-    State(AppState { pool, .. }): State<AppState>,
+    State(AppState {
+        pool,
+        chair_cache,
+        ride_status_cache,
+        ..
+    }): State<AppState>,
     axum::Json(req): axum::Json<PostInitializeRequest>,
 ) -> Result<axum::Json<PostInitializeResponse>, Error> {
     let output = tokio::process::Command::new("../sql/init.sh")
@@ -99,6 +104,9 @@ async fn post_initialize(
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         });
     }
+
+    chair_cache.invalidate_all();
+    ride_status_cache.invalidate_all();
 
     sqlx::query("UPDATE settings SET value = ? WHERE name = 'payment_gateway_url'")
         .bind(req.payment_server)
