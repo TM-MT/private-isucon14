@@ -1,10 +1,9 @@
+use std::collections::HashSet;
+
+use crate::models::{ChairLocation, Ride};
+use crate::{AppState, Error};
 use axum::extract::State;
 use axum::http::StatusCode;
-use sqlx::MySql;
-use sqlx::Pool;
-
-use crate::models::Ride;
-use crate::{knn, AppState, Error};
 
 pub fn internal_routes() -> axum::Router<AppState> {
     axum::Router::new().route(
@@ -12,6 +11,8 @@ pub fn internal_routes() -> axum::Router<AppState> {
         axum::routing::get(internal_get_matching),
     )
 }
+
+const MATCH_TRESHOLD: i32 = 200;
 
 // このAPIをインスタンス内から一定間隔で叩かせることで、椅子とライドをマッチングさせる
 async fn internal_get_matching(
@@ -28,41 +29,23 @@ async fn internal_get_matching(
     }
 
     let rides: Vec<Ride> =
-        sqlx::query_as("SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at LIMIT 10")
+        sqlx::query_as("SELECT * FROM rides WHERE chair_id IS NULL ORDER BY created_at")
             .fetch_all(&pool)
             .await?;
-
-    for ride in rides {
-        let candidate = get_candidate(&pool, &ride).await?;
-
-        if let Some((matched,)) = candidate {
-            sqlx::query("UPDATE rides SET chair_id = ? WHERE id = ?")
-                .bind(matched)
-                .bind(ride.id)
-                .execute(&pool)
-                .await?;
-        } else {
-            tracing::info!(
-                "No match found for ride ({:?}, {:?})",
-                ride.pickup_latitude,
-                ride.pickup_longitude
-            );
-        }
+    if rides.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
     }
 
-    Ok(StatusCode::NO_CONTENT)
-}
-
-async fn get_candidate(pool: &Pool<MySql>, ride: &Ride) -> Result<Option<(String,)>, Error> {
-    let match_candidate: Option<(String,)> = sqlx::query_as(
+    let available_chairs: Vec<ChairLocation> = sqlx::query_as(
         r#"
         SELECT
-            c.id
+            ctd.chair_id,
+            ctd.last_latitude AS latitude,
+            ctd.last_longitude AS longitude
         FROM chairs c
         INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
         WHERE
-            ctd.hash = ?
-            AND c.is_active = TRUE
+            c.is_active = TRUE
             AND (SELECT 
                     COUNT(*) = 0 
                 FROM (
@@ -74,59 +57,55 @@ async fn get_candidate(pool: &Pool<MySql>, ride: &Ride) -> Result<Option<(String
                     )
                     GROUP BY ride_id
                 ) is_completed 
-                WHERE completed = FALSE)
-        ORDER BY (ABS(ctd.last_latitude - ?) + ABS(ctd.last_longitude - ?)) ASC
-        LIMIT 1"#,
+                WHERE completed = FALSE)"#,
     )
-    .bind(knn::coord_to_hash(
-        ride.pickup_latitude,
-        ride.pickup_longitude,
-    ))
-    .bind(ride.pickup_latitude)
-    .bind(ride.pickup_longitude)
-    .fetch_optional(pool)
+    .fetch_all(&pool)
     .await?;
 
-    match match_candidate {
-        Some(_) => Ok(match_candidate),
-        None => {
+    let mut matched_chairs = HashSet::new();
+
+    // Greedyにマッチさせる
+    for ride in rides {
+        let candidate: Option<(&ChairLocation, i32)> = available_chairs
+            .iter()
+            .filter_map(|chair| {
+                if matched_chairs.contains(&chair.chair_id) {
+                    None
+                } else {
+                    Some((
+                        chair,
+                        crate::calculate_distance(
+                            ride.pickup_latitude,
+                            ride.pickup_longitude,
+                            chair.latitude,
+                            chair.longitude,
+                        ),
+                    ))
+                }
+            })
+            .min_by_key(|e| e.1);
+        if let Some((cl, distance)) = candidate {
+            if distance < MATCH_TRESHOLD {
+                let res = sqlx::query("UPDATE rides SET chair_id = ? WHERE id = ?")
+                    .bind(cl.chair_id.clone())
+                    .bind(ride.id)
+                    .execute(&pool)
+                    .await;
+                matched_chairs.insert(cl.chair_id.clone());
+                if res.is_err() {
+                    tracing::info!("Failed to update rides: {:?}", res);
+                }
+            } else {
+                tracing::info!("Too far to pickup: distance={:?}", distance);
+            }
+        } else {
             tracing::info!(
-                "No suitable chair Found for ride ({:#?}, {:#?}). Using random instead.",
+                "No match found for ride ({:?}, {:?})",
                 ride.pickup_latitude,
                 ride.pickup_longitude
             );
-            let m: Option<(String,)> = sqlx::query_as(
-                r#"
-                SELECT
-                    c.*
-                FROM chairs c
-                INNER JOIN chair_total_distance ctd ON c.id=ctd.chair_id
-                WHERE
-                    ctd.zone = ?
-                    AND c.is_active = TRUE
-                    AND (SELECT 
-                            COUNT(*) = 0 
-                        FROM (
-                            SELECT 
-                                COUNT(chair_sent_at) = 6 AS completed 
-                            FROM ride_statuses 
-                            WHERE ride_id IN (
-                                SELECT id FROM rides WHERE chair_id = c.id
-                            )
-                            GROUP BY ride_id
-                        ) is_completed 
-                        WHERE completed = FALSE)
-                ORDER BY RAND()
-                LIMIT 1;
-                "#,
-            )
-            .bind(knn::coord_to_zone(
-                ride.pickup_latitude,
-                ride.pickup_longitude,
-            ))
-            .fetch_optional(pool)
-            .await?;
-            Ok(m)
         }
     }
+
+    Ok(StatusCode::NO_CONTENT)
 }

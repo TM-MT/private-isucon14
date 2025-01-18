@@ -14,11 +14,9 @@ pub struct Chair {
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct ChairLocation {
-    pub id: String,
     pub chair_id: String,
     pub latitude: i32,
     pub longitude: i32,
-    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, sqlx::FromRow)]
