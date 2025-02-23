@@ -114,10 +114,22 @@ struct ChairPostCoordinateResponse {
     recorded_at: u64,
 }
 
+async fn get_ride<'e, E>(e: E, chair_id: &String) -> Option<Ride>
+where
+    E: 'e + sqlx::Executor<'e, Database = sqlx::MySql>,
+{
+    sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1")
+        .bind(chair_id)
+        .fetch_optional(e)
+        .await
+        .ok()?
+}
+
 async fn chair_post_coordinate(
     State(AppState {
         pool,
         ride_status_cache,
+        chair_to_ride_cache,
         ..
     }): State<AppState>,
     axum::Extension(chair): axum::Extension<Chair>,
@@ -148,11 +160,9 @@ async fn chair_post_coordinate(
     .execute(&mut *tx)
     .await?;
 
-    let ride: Option<Ride> =
-        sqlx::query_as("SELECT * FROM rides WHERE chair_id = ? ORDER BY updated_at DESC LIMIT 1")
-            .bind(chair.id)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let ride: Option<Ride> = chair_to_ride_cache
+        .optionally_get_with(chair.id.clone(), get_ride(&mut *tx, &chair.id))
+        .await;
     if let Some(ride) = ride {
         let status = crate::get_latest_ride_status(&mut *tx, &ride_status_cache, &ride.id).await?;
         if status != "COMPLETED" && status != "CANCELED" {

@@ -47,11 +47,15 @@ async fn main() -> anyhow::Result<()> {
         // Time to live (TTL): 1 minutes
         .time_to_live(Duration::from_secs(60))
         .build();
+    let chair_to_ride_cache = Cache::builder()
+        .time_to_live(Duration::from_secs(60))
+        .build();
 
     let app_state = AppState {
         pool,
         chair_cache,
         ride_status_cache,
+        chair_to_ride_cache,
         payment_gateway_url,
         internal_matching_lock: Arc::new(Semaphore::new(1)),
     };

@@ -453,6 +453,7 @@ async fn app_post_ride_evaluation(
         pool,
         payment_gateway_url,
         ride_status_cache,
+        chair_to_ride_cache,
         ..
     }): State<AppState>,
     Path((ride_id,)): Path<(String,)>,
@@ -504,6 +505,9 @@ async fn app_post_ride_evaluation(
     else {
         return Err(Error::NotFound("ride not found"));
     };
+    chair_to_ride_cache
+        .invalidate::<String>(&(ride.chair_id.clone().unwrap()))
+        .await;
 
     let Some(payment_token): Option<PaymentToken> =
         sqlx::query_as("SELECT * FROM payment_tokens WHERE user_id = ?")

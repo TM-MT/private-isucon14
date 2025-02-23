@@ -38,7 +38,7 @@ pub struct PaymentToken {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Ride {
     pub id: String,
     pub user_id: String,
