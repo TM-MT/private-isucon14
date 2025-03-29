@@ -60,3 +60,8 @@ tasks:
   check-payment:
     cmd: curl http://localhost:12345/payments --oauth2-bearer {{.CLI_ARGS}}
     desc: "Tokenに紐づく決済情報を確認 - task check-payment -- <token>"
+  sweep:
+    cmds:
+      - ./sweep.sh "webapp/logs/nginx"
+      - ./sweep.sh "webapp/logs/mysql"
+    desc: "Sweep analyze logs"
